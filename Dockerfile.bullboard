@@ -1,0 +1,13 @@
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Install all necessary packages
+RUN npm install express @bull-board/api @bull-board/ui @bull-board/express bull ioredis
+
+# Add the minimal express server
+COPY server.js .
+
+EXPOSE 3002
+
+CMD ["node", "server.js"]
