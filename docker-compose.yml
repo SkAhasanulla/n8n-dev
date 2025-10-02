@@ -87,7 +87,7 @@ services:
       - ./data/pgadmin_data:/var/lib/pgadmin
 
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus
     container_name: prometheus
     restart: always
     ports:
@@ -115,3 +115,4 @@ services:
       - redis
     ports:
       - "3002:3002"
+
