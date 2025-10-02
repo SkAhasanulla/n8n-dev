@@ -1,6 +1,7 @@
 {
   "name": "bullboard-server",
   "version": "1.0.0",
+  "main": "server.js",
   "private": true,
   "dependencies": {
     "express": "^4.18.2",
