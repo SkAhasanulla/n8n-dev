@@ -1,6 +1,16 @@
+# Build a tiny Bull Board server to inspect Redis queues
 FROM node:18-alpine
-WORKDIR /app
-COPY server.js /app/
-RUN npm install express @bull-board/api @bull-board/express bull ioredis
+
+WORKDIR /usr/src/app
+
+# Install minimal dependencies
+RUN apk add --no-cache git
+
+# Use a small express + bull-board app (server.js)
+COPY package.json package-lock.json* ./
+RUN npm install --production
+
+COPY server.js ./
+
 EXPOSE 3002
 CMD ["node", "server.js"]
