@@ -1,6 +1,6 @@
 FROM node:18-alpine
 WORKDIR /app
 COPY server.js /app/
-RUN npm install express bull-board ioredis
+RUN npm install express @bull-board/api @bull-board/express bull ioredis
 EXPOSE 3002
 CMD ["node", "server.js"]
