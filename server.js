@@ -17,5 +17,6 @@ serverAdapter.setBasePath("/ui");
 app.use("/ui", serverAdapter.getRouter());
 
 app.listen(3002, () => {
-  console.log("Bull Board running on http://localhost:3002/ui");
+  console.log("✅ Bull Board running at http://localhost:3002/ui");
 });
+
