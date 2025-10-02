@@ -1,156 +1,116 @@
 version: '3.8'
 
-volumes:
-  db_storage:
-  n8n_storage:
-  redis_storage:
-  pgadmin_data:
-  prometheus_data:
-  grafana_data:
-
-x-shared: &shared
-  restart: always
-  image: docker.n8n.io/n8nio/n8n
-  environment:
-    - DB_TYPE=postgresdb
-    - DB_POSTGRESDB_HOST=postgres
-    - DB_POSTGRESDB_PORT=5432
-    - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
-    - DB_POSTGRESDB_USER=${POSTGRES_NON_ROOT_USER}
-    - DB_POSTGRESDB_PASSWORD=${POSTGRES_NON_ROOT_PASSWORD}
-    ##- EXECUTIONS_MODE=queue
-    ##- QUEUE_MODE=redis
-    ##- QUEUE_BULL_REDIS_HOST=redis
-    ##- QUEUE_BULL_REDIS_PORT=6379
-    ##- QUEUE_HEALTH_CHECK_ACTIVE=true
-    - N8N_DEFAULT_BINARY_DATA_MODE=filesystem
-    - N8N_ENCRYPTION_KEY=${ENCRYPTION_KEY}
-    - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
-    - N8N_HOST=localhost
-    - N8N_PORT=5678
-    - N8N_PROTOCOL=http
-    - N8N_BASIC_AUTH_ACTIVE=true
-    - N8N_BASIC_AUTH_USER=${N8N_USER}
-    - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD}
-    - N8N_LOG_OUTPUT=file
-    - n8n.log.level=debug
-    - N8N_METRICS=true
-    - N8N_RUNNERS_ENABLED=true	
-  links:
-    - postgres
-    - redis
-  volumes:
-    - n8n_storage:/home/node/.n8n
-  depends_on:
-    redis:
-      condition: service_healthy
-    postgres:
-      condition: service_healthy
-
 services:
   postgres:
-    image: postgres:16
+    image: postgres:15
+    container_name: n8n_postgres
     restart: always
     environment:
-      - POSTGRES_USER
-      - POSTGRES_PASSWORD
-      - POSTGRES_DB
-      - POSTGRES_NON_ROOT_USER
-      - POSTGRES_NON_ROOT_PASSWORD
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
     volumes:
-      - db_storage:/var/lib/postgresql/data
-      - ./init-data.sh:/docker-entrypoint-initdb.d/init-data.sh
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -h localhost -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
-      interval: 5s
-      timeout: 5s
-      retries: 10
+      - ./data/db_storage:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
 
   redis:
-    image: redis:6-alpine
+    image: redis:7
+    container_name: n8n_redis
     restart: always
     volumes:
-      - redis_storage:/data
-    healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
-      interval: 5s
-      timeout: 5s
-      retries: 10
+      - ./data/redis_storage:/data
+    ports:
+      - "6379:6379"
 
   n8n:
-    <<: *shared
+    image: n8nio/n8n:latest
+    container_name: n8n_main
+    restart: always
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_USER}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD}
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
+      - DB_POSTGRESDB_USER=${POSTGRES_USER}
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - N8N_HOST=${N8N_HOST}
+      - N8N_PORT=5678
+    depends_on:
+      - postgres
     ports:
-      - 5678:5678
-    user: root
+      - "5678:5678"
+    volumes:
+      - ./data/n8n_storage:/home/node/.n8n
 
   n8n-worker:
-    <<: *shared
-    command: worker
-    depends_on:
-      - n8n
-
-  redisinsight:
-    image: redislabs/redisinsight:1.14.0
-    container_name: redisinsight
-    ports:
-      - "8001:8001"
+    image: n8nio/n8n:latest
+    container_name: n8n_worker
     restart: always
     depends_on:
-      redis:
-        condition: service_healthy
-
-  bull-board:
-    build:
-      context: .
-      dockerfile: Dockerfile.bullboard
-    container_name: bull-board
-    ports:
-      - "3002:3002"
+      - redis
+      - postgres
     environment:
-      - REDIS_HOST=redis
-    depends_on:
-      redis:
-        condition: service_healthy
+      - EXECUTIONS_MODE=queue
+      - QUEUE_BULL_REDIS_HOST=redis
+      - QUEUE_BULL_REDIS_PORT=6379
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
+      - DB_POSTGRESDB_USER=${POSTGRES_USER}
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+
+  redisinsight:
+    image: redislabs/redisinsight:latest
+    container_name: redisinsight
+    restart: always
+    ports:
+      - "8001:8001"
 
   pgadmin:
     image: dpage/pgadmin4
     container_name: pgadmin
     restart: always
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@admin.com
+      - PGADMIN_DEFAULT_PASSWORD=admin123
     ports:
       - "5050:80"
     volumes:
-      - pgadmin_data:/var/lib/pgadmin
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@example.com
-      PGADMIN_DEFAULT_PASSWORD: admin
-    depends_on:
-      postgres:
-        condition: service_healthy
+      - ./data/pgadmin_data:/var/lib/pgadmin
 
   prometheus:
-    image: prom/prometheus
+    image: prom/prometheus:latest
     container_name: prometheus
     restart: always
     ports:
       - "9090:9090"
     volumes:
-      - prometheus_data:/prometheus
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-    depends_on:
-      - n8n
+      - ./data/prometheus_data:/prometheus
 
   grafana:
-    image: grafana/grafana
+    image: grafana/grafana:latest
     container_name: grafana
     restart: always
     ports:
       - "3003:3000"
     volumes:
-      - grafana_data:/var/lib/grafana
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - ./data/grafana_data:/var/lib/grafana
+
+  bullboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.bullboard
+    container_name: bullboard
+    restart: always
+    ports:
+      - "3002:3002"
     depends_on:
-      - prometheus
+      - redis
